@@ -107,7 +107,8 @@ const unsigned int CLP = 8;
 /*
 
 */
-unsigned short int initialSpeed = 20, Kp = 25, Ki = 0, Kd = 0;
+unsigned short int initialSpeed = 20, Kp = 25, Kd = 10;
+float Ki = 0.3;
 unsigned int sampleTime = 100;
 unsigned long lastTime  = 0;
 float error = 0, previousError = 0;
