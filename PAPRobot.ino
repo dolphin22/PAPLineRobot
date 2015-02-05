@@ -104,6 +104,66 @@ void MotorDriectionAndSpeedSet(unsigned char Direction,unsigned char MotorSpeedA
 const unsigned int Near = 7;
 const unsigned int CLP = 8;
 
+/*
+
+*/
+unsigned short int initialSpeed = 20, Kp = 25, Ki = 0, Kd = 0;
+unsigned int sampleTime = 100;
+unsigned long lastTime  = 0;
+float error = 0, previousError = 0;
+float P, I, D, correction;
+
+unsigned int S1, S2, S3, S4, S5;
+
+char lastPosition = 'l';
+
+void readSensors() {
+  // reset all sensors
+  S1 = digitalRead(2);
+  if (S1 == HIGH) lastPosition = 'l';
+  S2 = digitalRead(3);
+  S3 = digitalRead(4);
+  S4 = digitalRead(5);
+  S5 = digitalRead(6);
+  if (S5 == HIGH) lastPosition = 'r';
+}
+
+void CalculateError() {
+  
+  readSensors();
+  
+  previousError = error;
+  
+  error = (S1*1) + (S2*2) + (S3*3) + (S4*4) + (S5*5);
+  error = error / (S1+S2+S3+S4+S5);
+  error -= 3;
+  
+  Serial.print("Error: ");
+  Serial.println(error);
+}
+
+void ComputePID() {
+  unsigned long now = millis();
+  unsigned long timeChange = now - lastTime;
+  
+  if (timeChange >= sampleTime) {
+    CalculateError();
+    P = error * Kp;
+    I += (error * Ki);
+    if (I > 255) I = 255;
+    else if (I < 0) I = 0;
+    D = (error - previousError) * Kd;
+    
+    correction = P + I + D;
+    
+    Serial.print("Correction: ");
+    Serial.println(correction); 
+    
+    lastTime = now;
+    return;
+  } else return;
+}
+
 void setup()  {
   Wire.begin(); // join i2c bus (address optional for master)
   delayMicroseconds(10000);
@@ -125,70 +185,37 @@ void setup()  {
   digitalWrite(6, LOW);
   digitalWrite(7, LOW);
   digitalWrite(8, LOW);
+  
+  lastTime = millis() - sampleTime;
 }
 
-
-
-/*
-
-*/
-unsigned short int initialSpeed = 30, Kp = 15, Ki = 0, Kd = 0;
-float error = 0, previousError = 0;
-float P, I, D, correction;
-
-unsigned int S1, S2, S3, S4, S5;
-
-char lastPosition = 'r';
-
-void CalculateError() {
-  
-  // reset all sensors
-  S1 = digitalRead(2);
-  if (S1 == HIGH) lastPosition = 'l';
-  S2 = digitalRead(3);
-  S3 = digitalRead(4);
-  S4 = digitalRead(5);
-  S5 = digitalRead(6);
-  if (S5 == HIGH) lastPosition = 'r';
-  
-  previousError = error;
-  
-  error = (S1*1) + (S2*2) + (S3*3) + (S4*4) + (S5*5);
-  error = error / (S1+S2+S3+S4+S5);
-  error -= 3;
-  
-  Serial.print("Error: ");
-  Serial.println(error);
-}
 
 void loop()  {
-  
   if (digitalRead(CLP) == LOW) {
-    CalculateError();
-    
+    readSensors();
     if ((S1+S2+S3+S4+S5) == 0) {
       if (lastPosition == 'l') {
         Serial.println("Full left");
-        MotorSpeedSetAB(100, 100);
+        MotorSpeedSetAB(80, 80);
         delay(10);
         MotorDirectionSet(0b1001);
       } else if (lastPosition == 'r') {
         Serial.println("Full right");
-        MotorSpeedSetAB(100, 100);
+        MotorSpeedSetAB(80, 80);
         delay(10);
         MotorDirectionSet(0b0110);
       }
     } else {
-      P = error * Kp;
-      I += error;
-      I = I * Ki;
-      D = error - previousError;
-      
-      correction = P + I + D;
-      Serial.print("Correction: ");
-      Serial.println(correction);
-      
-      MotorSpeedSetAB(initialSpeed + correction, initialSpeed - correction);
+      ComputePID();
+      if ((initialSpeed - correction) < 0 & (initialSpeed + correction > 100)) {
+        MotorSpeedSetAB(0, 100);
+      } else if ((initialSpeed - correction) < 0 & (initialSpeed + correction <= 100)) {
+        MotorSpeedSetAB(0, initialSpeed + correction);
+      } else if ((initialSpeed - correction) >= 0 & (initialSpeed + correction > 100)) {
+        MotorSpeedSetAB(initialSpeed - correction, 100);
+      } else {
+        MotorSpeedSetAB(initialSpeed - correction, initialSpeed + correction);
+      }
       delay(10);
       MotorDirectionSet(0b1010);
     }
